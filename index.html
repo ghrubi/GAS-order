@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Order Guide</title>
+    <base target="_top">
+      <script>
+    // Prevent forms from submitting. Need this always.
+    function preventFormSubmit(){
+      var forms = document.querySelectorAll('form');
+      for (var i=0; i<forms.length; i++){
+        forms[i].addEventListener('submit', function(event){
+          event.preventDefault();
+        });
+      }
+    }
+    window.addEventListener('load', preventFormSubmit);
+    </script>
+  </head>
+  <body>
+
+<!-- Header -->
+    <h3><span id="header">Choose Order Guide</span> <span id="header_date"></span></h3>
+<!-- End Header -->
+<!-- Main Sections -->
+<!-- Sub guide selection -->
+    <div id="guide_selection">
+      <form id="select_guide">
+        <select name="guide_list" form="select_guide">
+    <? var g = getGuides(); ?>
+    <? for (i=0; i<g.length; i++){ ?>
+    <option value="<?= g[i] ?>"><?= g[i] ?></option>
+
+    <? } ?>
+        </select>
+        <input type="submit" value="Select" id="sg_submit">
+      </form>
+    </div>
+<!-- End Sub guide selection -->
+<!-- Sub date selection -->
+    <div id="date_selection"  hidden="true">
+      <form id="select_date">
+        <select id="date_list" name="date_list" form="select_date">
+
+        </select>
+        <input type="submit" value="Select" id="sd_submit">
+      </form>
+    </div>
+<!-- End Sub date selection -->
+
+<!-- Sub new order section -->
+    <div id="new_order_section" hidden="true">
+      <form id="new_order">
+        <div id="new_order_form"></div>
+        <br>
+        <input type="submit" value="Calculate" id="no_submit">
+      </form>
+    </div>
+<!-- End Sub new order section -->
+
+<!-- Sub existing order section -->
+    <div id="existing_order_section" hidden="true">
+      <form id="existing_order">
+        <div id="existing_order_form"></div>
+        <span id="existing_order_status"></span>
+        <br>
+        <input type="submit" value="Update" id="eo_submit">
+      </form>
+      <div class="half-gap"><br></div>
+      <form id="order_summary">
+        <input type="submit" id="summary_button" value="Summary">
+      </form>
+    </div>
+<!-- End Sub existing order section -->
+
+<!-- Sub order summary section -->
+    <div id="order_summary_section" hidden="true"></div>
+<!-- End Sub order summary section -->
+    
+      
+    
+<!-- End Main Section -->
+
+    <?!= HtmlService.createHtmlOutputFromFile('CSS').getContent(); ?>
+
+
+    <script src="https://apis.google.com/js/api.js?onload=onApiLoad"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+
+    <script>
+    // select_guide submit
+      $( document ).ready(function(){
+        $("#select_guide").submit(function(){
+          $("#sg_submit").val("Working...");
+          google.script.run.withSuccessHandler(function(ret){
+            $("#guide_selection").hide();
+            $("#date_selection").show();
+            console.log(ret);
+            doSelectDate(ret);
+          }).selectGuide(this);
+
+        });
+      });
+      
+      // select_date submit
+      $( document ).ready(function(){
+        $("#select_date").submit(function(){
+          $("#sd_submit").val("Working...");
+          google.script.run.withSuccessHandler(function(ret){
+            console.log(ret);
+            doDisplayGuide(ret);
+          }).selectDate(this);
+
+        });
+      });
+      
+      // new_order submit
+      $( document ).ready(function(){
+        $("#new_order").submit(function(){
+          $("#no_submit").val("Working...");
+          google.script.run.withSuccessHandler(function(ret){
+            console.log(ret);
+            $("#new_order_section").hide();
+            google.script.run.withSuccessHandler(function(dt){
+              console.log(dt);
+              doDisplayGuide(dt);
+            }).newToExisting();
+          }).calcOrder(this);
+
+        });
+      });
+      
+      // existing_order submit
+      $( document ).ready(function(){
+        $("#existing_order").submit(function(){
+          // Reset status
+          $("#eo_submit").val("Working...");
+          document.getElementById("existing_order_status").innerHTML = "";
+          google.script.run.withSuccessHandler(function(ret){
+            console.log(ret);
+            if(ret == 200){
+              document.getElementById("existing_order_status").innerHTML = "Updated!";
+              $("#eo_submit").val("Update");
+              document.getElementById("summary_button").disabled=false;
+            }
+          }).updateOrder(this);
+
+        });
+      });
+      
+      // order_summary submit
+      $( document ).ready(function(){
+        $("#order_summary").submit(function(){
+          // Reset status
+          $("#summary_button").val("Working...");
+          document.getElementById("existing_order_status").innerHTML = "";
+          google.script.run.withSuccessHandler(function(ret){
+            console.log(ret);
+            doDisplaySummary(ret);
+          }).orderSummary();
+
+        });
+      });
+    </script>
+    <script>
+    <!-- Function definitions -->
+    <!-- Guide selected -->
+      function doSelectDate(r) {
+        // Get selected guide.
+        var selectedGuide = r.shift();
+        
+        document.getElementById("header").innerHTML = selectedGuide + " Order Guide";
+        
+        // Get date listbox.
+        var dtListBox = document.getElementById("date_list");
+        
+        // Set the dates.
+        for (var i=0; i<r.length; i++){
+          var opt = document.createElement("option");
+	      opt.text =  r[i];
+        
+        console.log(r[i]);
+        
+          // Add option to listbox.
+         dtListBox.add(opt);
+        }
+        
+        return true;
+      }
+      
+    <!-- Date selected -->
+      function doDisplayGuide(r) {
+        // Get selected date.
+        var selectedDate = r.shift();
+        
+        document.getElementById("header_date").innerHTML = selectedDate;
+        $("#date_selection").hide();
+        
+        // Get type of order to display. New or existing?
+        var isNewOrder = r.shift();
+        
+        if(isNewOrder == 'n'){
+          drawNewOrder(r);
+        }
+        else{
+          drawExistingOrder(r);
+        }
+
+        return true;
+      }
+      
+      <!-- Draw order grids -->
+      function drawNewOrder(d){
+        var orderTable = '\
+        <table border=0 cellpadding=7> \
+          <tr> \
+            <th>Code</th> \
+            <th>Desc</th> \
+            <th>Units Per Case</th> \
+            <th>Buildup</th> \
+            <th>Min</th> \
+            <th>Cases On Hand</th> \
+            <th>Units On Hand</th> \
+          </tr>';
+      
+        for(var i=0; i<d.length; i++){
+          // Fix Min to cases or X of Y units. Min is at [][4].
+          if(d[i][4]){
+            if(d[i][4]>=1){
+              var min = d[i][4] + ' CS';
+            }
+            else{
+              var min = Number(d[i][4]) * d[i][2];
+              min = min + ' of ' + d[i][2];
+            }
+          }
+          else{
+            var min = d[i][4];
+          }
+          
+          // Hide units if per case == 1. No partials or units.
+          if(d[i][2] == 1){
+            var unitsInputCode = '<input type="number" id="u' + i + '" name="u' + i + '" step="0.01" hidden="true">';
+          }
+          else{
+            var unitsInputCode = '<input type="number" id="u' + i + '" name="u' + i + '" step="0.01">';
+          }
+          
+          orderTable += '\
+          <tr> \
+            <td>' + d[i][0] + '</td> \
+            <td>' + d[i][1] + '</td> \
+            <td>' + d[i][2] + '</td> \
+            <td>' + d[i][3] + '</td> \
+            <td>' + min + '</td> \
+            <td><input type="number" id="c' + i + '" name="c' + i + '" step="0.01"></td> \
+            <td>' + unitsInputCode + '</td> \
+          </tr>';
+        }
+        
+        orderTable += '\
+        </table>';
+        
+        document.getElementById("new_order_form").innerHTML = orderTable;
+        $("#new_order_section").show();
+      }
+      
+      function drawExistingOrder(d){
+        var orderTable = '\
+        <table border=0 cellpadding=7> \
+          <tr> \
+            <th>Code</th> \
+            <th>Desc</th> \
+            <th>Units Per Case</th> \
+            <th>Buildup</th> \
+            <th>Min</th> \
+            <th>Cases On Hand</th> \
+            <th>Units On Hand</th> \
+            <th>Order Amt</th> \
+            <th>Override</th> \
+          </tr>';
+      
+        for(var i=0; i<d.length; i++){
+          // Fix Min to cases or X of Y units. Min is at [][4].
+          if(d[i][4]){
+            if(d[i][4]>=1){
+              var min = d[i][4] + ' CS';
+            }
+            else{
+              var min = Number(d[i][4]) * d[i][2];
+              min = min + ' of ' + d[i][2];
+            }
+          }
+          else{
+            var min = d[i][4];
+          }
+          
+          // Hide units if per case == 1. No partials or units.
+          if(d[i][2] == 1){
+            var unitsInputCode = '<input type="number" id="u' + i + '" name="u' + i + '" step="0.01" hidden="true">';
+          }
+          else{
+            var unitsInputCode = '<input type="number" id="u' + i + '" name="u' + i + '" value="' + d[i][6] + '" step="0.01">';
+          }
+          
+          // Match backgrounds via class CSS of readonly inputs
+          if(i%2 != 0){
+            var inputOrderCode = '<input class="order-ro" type="number" id="o' + i + '" name="o' + i + '" value="' + d[i][7] + '" readOnly="true">';
+          }
+          else{
+            var inputOrderCode = '<input type="number" id="o' + i + '" name="o' + i + '" value="' + d[i][7] + '" readOnly="true">';
+          }
+          
+          orderTable += '\
+          <tr> \
+            <td>' + d[i][0] + '</td> \
+            <td>' + d[i][1] + '</td> \
+            <td>' + d[i][2] + '</td> \
+            <td>' + d[i][3] + '</td> \
+            <td>' + min + '</td> \
+            <td><input type="number" id="c' + i + '" name="c' + i + '" value="' + d[i][5] + '" step="0.01"></td> \
+            <td>' + unitsInputCode + '</td> \
+            <td>' + inputOrderCode + '</td> \
+            <td align="center"><input type="checkbox" id="x' + i + '" onClick=document.getElementById("o' + i + '").readOnly=false;this.disabled=true;document.getElementById("summary_button").disabled=true></td> \
+          </tr>';
+        }
+        
+        orderTable += '\
+        </table>';
+        
+        document.getElementById("existing_order_form").innerHTML = orderTable;
+        // Show existing order
+        $("#existing_order_section").show();
+      }
+      
+      function doDisplaySummary(d){
+        var summaryTable = '\
+        <table border=0 cellpadding=7> \
+          <tr> \
+            <th>Code</th> \
+            <th>Desc</th> \
+            <th>Order Amt</th> \
+          </tr>';
+      
+        for(var i=0; i<d.length; i++){
+                  
+          summaryTable += '\
+          <tr> \
+            <td>' + d[i][0] + '</td> \
+            <td>' + d[i][1] + '</td> \
+            <td>' + d[i][7] + '</td> \
+          </tr>';
+        }
+        
+        summaryTable += '\
+          <tr class="summary-row"> \
+            <td colspan=3>Count: ' + d.length + '</td> \
+          </tr> \
+        </table>';
+        
+        document.getElementById("order_summary_section").innerHTML = summaryTable;
+        
+        // Hide existing order section
+        $("#existing_order_section").hide();
+        // Show order summary
+        $("#order_summary_section").show();
+      }
+      
+        
+        
+    </script>
+    <p><p>
+  </body>
+</html>
+
+
+
+
+
+
